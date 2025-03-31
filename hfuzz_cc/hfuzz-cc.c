@@ -544,7 +544,9 @@ static int ldMode(int argc, char** argv) {
 
     /* Reference standard honggfuzz libraries first (libhfuzz, libhfcommon and libhfnetdriver) */
     args[j++] = getLibHFNetDriverPath();
+    args[j++] = "-Wl,--whole-archive";
     args[j++] = getLibHFuzzPath();
+    args[j++] = "-Wl,--no-whole-archive";
     args[j++] = getLibHFCommonPath();
 
     /* Needed by libhfcommon */
