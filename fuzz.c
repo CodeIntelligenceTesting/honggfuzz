@@ -219,19 +219,31 @@ static void fuzz_perfFeedback(run_t* run) {
     int64_t diff0 = (int64_t)run->global->feedback.hwCnts.cpuInstrCnt - run->hwCnts.cpuInstrCnt;
     int64_t diff1 = (int64_t)run->global->feedback.hwCnts.cpuBranchCnt - run->hwCnts.cpuBranchCnt;
 
+    const time_t curr_sec        = time(NULL);
+    time_t       lastStatsUpdate = ATOMIC_GET(run->global->timing.lastStatsUpdate);
+    bool         shouldForceUpdate =
+        run->global->timing.statsUpdateInterval > 0 &&
+        (curr_sec - lastStatsUpdate) >= run->global->timing.statsUpdateInterval;
+
+    bool isNewCoverage = run->hwCnts.newBBCnt > 0 || softNewPC > 0 || softNewEdge > 0 ||
+                         softNewCmp > 0 || diff0 < 0 || diff1 < 0;
+
     /* Any increase in coverage (edge, pc, cmp, hw) counters forces adding input to the corpus */
-    if (run->hwCnts.newBBCnt > 0 || softNewPC > 0 || softNewEdge > 0 || softNewCmp > 0 ||
-        diff0 < 0 || diff1 < 0) {
-        if (diff0 < 0) {
-            run->global->feedback.hwCnts.cpuInstrCnt = run->hwCnts.cpuInstrCnt;
+    if (isNewCoverage || shouldForceUpdate) {
+        if (isNewCoverage) {
+            if (diff0 < 0) {
+                run->global->feedback.hwCnts.cpuInstrCnt = run->hwCnts.cpuInstrCnt;
+            }
+            if (diff1 < 0) {
+                run->global->feedback.hwCnts.cpuBranchCnt = run->hwCnts.cpuBranchCnt;
+            }
+            run->global->feedback.hwCnts.bbCnt += run->hwCnts.newBBCnt;
+            run->global->feedback.hwCnts.softCntPc += softNewPC;
+            run->global->feedback.hwCnts.softCntEdge += softNewEdge;
+            run->global->feedback.hwCnts.softCntCmp += softNewCmp;
         }
-        if (diff1 < 0) {
-            run->global->feedback.hwCnts.cpuBranchCnt = run->hwCnts.cpuBranchCnt;
-        }
-        run->global->feedback.hwCnts.bbCnt += run->hwCnts.newBBCnt;
-        run->global->feedback.hwCnts.softCntPc += softNewPC;
-        run->global->feedback.hwCnts.softCntEdge += softNewEdge;
-        run->global->feedback.hwCnts.softCntCmp += softNewCmp;
+
+        ATOMIC_SET(run->global->timing.lastStatsUpdate, curr_sec);
 
         LOG_I("Sz:%zu Tm:%" _HF_NONMON_SEP PRIu64 "us (i/b/h/e/p/c) New:%" PRIu64 "/%" PRIu64
               "/%" PRIu64 "/%" PRIu64 "/%" PRIu64 "/%" PRIu64 ", Cur:%" PRIu64 "/%" PRIu64
@@ -243,7 +255,6 @@ static void fuzz_perfFeedback(run_t* run) {
             run->global->feedback.hwCnts.softCntPc, run->global->feedback.hwCnts.softCntCmp);
 
         if (run->global->io.statsFileName) {
-            const time_t curr_sec      = time(NULL);
             const time_t elapsed_sec   = curr_sec - run->global->timing.timeStart;
             size_t       curr_exec_cnt = ATOMIC_GET(run->global->cnts.mutationsCnt);
             /*
@@ -273,6 +284,9 @@ static void fuzz_perfFeedback(run_t* run) {
             );
         }
 
+        if (!isNewCoverage) {
+            return;
+        }
         /* Update per-input coverage metrics */
         run->dynfile->cov[0] = softCurEdge + softCurPC + run->hwCnts.bbCnt;
         run->dynfile->cov[1] = softCurCmp;
