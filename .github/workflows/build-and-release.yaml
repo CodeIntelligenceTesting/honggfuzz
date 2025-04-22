@@ -30,7 +30,6 @@ jobs:
           apt update && apt install -y \
             binutils-dev \
             build-essential \
-            clang \
             libblocksruntime-dev \
             libiberty-dev \
             liblzma-dev \
@@ -47,7 +46,6 @@ jobs:
         run: |
           # Enable static linking of most system libraries
           export BUILD_OSSFUZZ_STATIC=true
-          export CC=clang
           # Quoting https://github.com/google/oss-fuzz/blob/master/infra/base-images/base-builder/precompile_honggfuzz#L33
           #   These CFLAGs match honggfuzz's default, with the exception of -mtune to
           #   improve portability and `-D_HF_LINUX_NO_BFD` to remove assembly instructions
