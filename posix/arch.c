@@ -48,6 +48,10 @@ extern char** environ;
 #define _POSIX_SPAWN_DISABLE_ASLR 0x0100
 #endif
 #endif
+#if defined(__linux__)
+#include <sys/personality.h>
+#include <sys/syscall.h>
+#endif
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -256,7 +260,16 @@ bool arch_launchChild(run_t* run) {
         }
         kvm_close(hd);
     }
-
+#elif defined(__linux__)
+    /*
+     * Disable ASLR:
+     * This might fail in Docker, as Docker blocks __NR_personality. Consequently
+     * it's just a debug warning
+     */
+    if (run->global->arch_linux.disableRandomization &&
+        syscall(__NR_personality, ADDR_NO_RANDOMIZE) == -1) {
+        PLOG_D("personality(ADDR_NO_RANDOMIZE) failed");
+    }
 #endif
     /* alarm persists across forks, so disable it here */
     alarm(0);
