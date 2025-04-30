@@ -163,39 +163,50 @@ size_t sanitizers_parseReport(run_t* run, pid_t pid, funcs_t* funcs, uint64_t* p
         /* First step is to identify header */
         if (!headerFound) {
             int reportpid = 0;
-            if (sscanf(lineptr, "==%d==ERROR: ", &reportpid) != 1) {
-                continue;
-            }
-            if (reportpid != pid) {
-                LOG_W(
-                    "SAN report found in '%s', but its PID:%d is different from the needed PID:%d",
-                    crashReport, reportpid, (int)pid);
-                break;
-            }
-            headerFound = true;
+            if (sscanf(lineptr, "==%d==ERROR: ", &reportpid) == 1) {
+                // Found ASAN report header
+                if (reportpid != pid) {
+                    LOG_W(
+                        "SAN report found in '%s', but its PID:%d is different from the needed PID:%d",
+                        crashReport, reportpid, (int)pid);
+                    break;
+                }
+                headerFound = true;
 
-            /* Extract the error description */
-            sscanf(lineptr, "==%*d==ERROR: %" HF_XSTR(HF_STR_LEN_MINUS_1) "[^\n]", description);
+                /* Extract the error description */
+                sscanf(lineptr, "==%*d==ERROR: %" HF_XSTR(HF_STR_LEN_MINUS_1) "[^\n]", description);
 
-            /* Extract the crash address and PC. First try the standard "on address" format
-             */
-            int matchCount = sscanf(lineptr,
-                "==%*d==ERROR: %*[^:]: %*[^ ] on address 0x%" PRIx64 " at pc 0x%" PRIx64, crashAddr,
-                pc);
+                /* Extract the crash address and PC. First try the standard "on address" format
+                */
+                int matchCount = sscanf(lineptr,
+                    "==%*d==ERROR: %*[^:]: %*[^ ] on address 0x%" PRIx64 " at pc 0x%" PRIx64, crashAddr,
+                    pc);
 
-            if (matchCount != 2) {
-                /* If we cannot match report headers with "on address", try the format with a descriptor before "address" */
-                char addressDetail[HF_STR_LEN] = {0};
-                if (sscanf(lineptr,
-                        "==%*d==ERROR: %*[^:]: %*[^ ] on %" HF_XSTR(
-                            HF_STR_LEN_MINUS_1) "s address 0x%" PRIx64 " (pc 0x%" PRIx64,
-                        addressDetail, crashAddr, pc) == 3) {
-                    /* If the address descriptor is "unknown", set crashAddr to 0 as this would
-                     * break error deduplication*/
-                    if (strncmp(addressDetail, "unknown", 7) == 0) {
-                        *crashAddr = 0;
+                if (matchCount != 2) {
+                    /* If we cannot match report headers with "on address", try the format with a descriptor before "address" */
+                    char addressDetail[HF_STR_LEN] = {0};
+                    if (sscanf(lineptr,
+                            "==%*d==ERROR: %*[^:]: %*[^ ] on %" HF_XSTR(
+                                HF_STR_LEN_MINUS_1) "s address 0x%" PRIx64 " (pc 0x%" PRIx64,
+                            addressDetail, crashAddr, pc) == 3) {
+                        /* If the address descriptor is "unknown", set crashAddr to 0 as this would
+                        * break error deduplication*/
+                        if (strncmp(addressDetail, "unknown", 7) == 0) {
+                            *crashAddr = 0;
+                        }
                     }
                 }
+            } else if (sscanf(lineptr, "%*[^:]:%*d:%*d: runtime error: %" HF_XSTR(HF_STR_LEN_MINUS_1) "[^\n]", description) == 1) {
+                /* Parse ubsan reports of the form:
+                 *   <file>:<line>:<column>: runtime error: <description>
+                 * E.g.
+                 *   fuzz_me.cpp:13:11: runtime error: shift exponent 32 is too large for 32-bit type 'int'
+                 */
+                headerFound = true;
+                *crashAddr = 0;
+                *pc = 0;
+            } else {
+                continue;
             }
         } else {
             char* pLineLC = lineptr;
