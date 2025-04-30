@@ -179,11 +179,11 @@ size_t sanitizers_parseReport(run_t* run, pid_t pid, funcs_t* funcs, uint64_t* p
 
             /* Extract the crash address and PC. First try the standard "on address" format
              */
-            int mathchCount = sscanf(lineptr,
+            int matchCount = sscanf(lineptr,
                 "==%*d==ERROR: %*[^:]: %*[^ ] on address 0x%" PRIx64 " at pc 0x%" PRIx64, crashAddr,
                 pc);
 
-            if (mathchCount != 2) {
+            if (matchCount != 2) {
                 /* If we cannot match report headers with "on address", try the format with a descriptor before "address" */
                 char addressDetail[HF_STR_LEN] = {0};
                 if (sscanf(lineptr,
