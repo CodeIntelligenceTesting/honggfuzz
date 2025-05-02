@@ -752,7 +752,9 @@ const uint8_t* input_getRandomInputAsBuf(run_t* run, size_t* len) {
 }
 
 static bool input_shouldReadNewFile(run_t* run) {
-    if (fuzz_getState(run->global) != _HF_STATE_DYNAMIC_DRY_RUN) {
+    // Don't chunk corpus entries when in minimize mode. This is inefficient for
+    // processing large corpus directories which already have chunked files.
+    if (fuzz_getState(run->global) != _HF_STATE_DYNAMIC_DRY_RUN || run->global->cfg.minimize) {
         input_setSize(run, run->global->mutate.maxInputSz);
         return true;
     }
